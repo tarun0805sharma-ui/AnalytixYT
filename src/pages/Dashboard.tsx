@@ -169,10 +169,10 @@ export default function DashboardPage() {
     c.author.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const pieData = analysis ? [
-    { name: 'Positive', value: analysis.sentiment.positive },
-    { name: 'Negative', value: analysis.sentiment.negative },
-    { name: 'Neutral', value: Math.max(0, 100 - analysis.sentiment.positive - analysis.sentiment.negative) },
+  const pieData = analysis?.sentiment ? [
+    { name: 'Positive', value: analysis.sentiment.positive || 0 },
+    { name: 'Negative', value: analysis.sentiment.negative || 0 },
+    { name: 'Neutral', value: Math.max(0, 100 - (analysis.sentiment.positive || 0) - (analysis.sentiment.negative || 0)) },
   ] : [];
 
   return (
@@ -275,7 +275,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-1 space-y-6">
               
               {/* Summary Card */}
-              {analysis && (
+              {analysis?.summary && (
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -290,7 +290,7 @@ export default function DashboardPage() {
               )}
 
               {/* Sentiment Card */}
-              {analysis && (
+              {analysis?.sentiment && (
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
