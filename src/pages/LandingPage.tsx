@@ -8,13 +8,22 @@ import {
   Download, 
   Zap, 
   CheckCircle2,
-  ChevronRight
+  ChevronRight,
+  LineChart,
+  Activity,
+  Github,
+  Twitter,
+  Linkedin,
+  PlayCircle,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
 
 export default function LandingPage() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,22 +40,33 @@ export default function LandingPage() {
     <div className="font-sans selection:bg-sky-500/30 selection:text-white">
       {/* Navigation */}
       <nav className="flex items-center justify-between p-6 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="bg-[#38bdf8] p-2 rounded-xl">
-            <Youtube className="w-6 h-6 text-[#0f172a]" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-white">Analytix.yt</span>
-        </div>
+        <a href="/" className="flex items-center gap-2 group">
+          <LineChart className="w-7 h-7 text-accent group-hover:scale-105 transition-transform" />
+          <span className="text-2xl font-black tracking-tight text-white flex items-center gap-0.5">
+            Analytix<span className="text-accent">.yt</span>
+          </span>
+        </a>
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
           <a href="#features" className="hover:text-white transition-colors">Features</a>
-          <a href="#demo" className="hover:text-white transition-colors">How it works</a>
+          <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
           <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
         </div>
         <div className="flex items-center gap-4">
-          <button className="hidden sm:block text-sm font-medium text-slate-400 hover:text-white">Log in</button>
-          <button className="btn-primary px-5 py-2.5 rounded-full transition-all">
-            Get Started Free
-          </button>
+          {user ? (
+            <>
+              <button onClick={() => navigate('/dashboard')} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-white transition-colors">Dashboard</button>
+              <button onClick={async () => await logout()} className="btn-primary px-5 py-2.5 rounded-full transition-all flex items-center gap-2">
+                Log out <LogOut className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => navigate('/auth')} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-white transition-colors">Log in</button>
+              <button onClick={() => navigate('/auth')} className="btn-primary px-5 py-2.5 rounded-full transition-all flex items-center gap-2">
+                Get Started Free <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -96,10 +116,22 @@ export default function LandingPage() {
               </button>
             </div>
           </form>
-        <div className="flex items-center justify-center gap-6 mt-8 text-sm text-slate-400 font-medium">
+        <div className="flex items-center justify-center gap-6 mt-8 text-sm text-slate-400 font-medium pb-12">
           <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-accent" /> No credit card required</span>
           <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-accent" /> Free 100 comments/mo</span>
         </div>
+        
+        {/* Trusted By Banner */}
+        <div className="pt-12 border-t border-white/5">
+          <p className="text-sm font-medium text-slate-500 mb-6 uppercase tracking-widest">Trusted by creators & analysts at</p>
+          <div className="flex flex-wrap justify-center gap-8 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+            <div className="flex items-center gap-2 select-none"><div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center"><PlayCircle className="w-5 h-5 text-white" /></div><span className="text-xl font-bold text-white">MediaTech</span></div>
+            <div className="flex items-center gap-2 select-none"><div className="w-8 h-8 rounded bg-blue-500 text-white font-bold flex items-center justify-center">S</div><span className="text-xl font-bold text-white">SocialScale</span></div>
+            <div className="flex items-center gap-2 select-none"><div className="w-8 h-8 rounded-full border-2 border-indigo-500 flex items-center justify-center"><Activity className="w-4 h-4 text-indigo-500" /></div><span className="text-xl font-bold text-white">DataStream</span></div>
+            <div className="flex items-center gap-2 select-none"><div className="w-8 h-8 rotate-45 bg-emerald-500 flex items-center justify-center"></div><span className="text-xl font-bold text-white">ViralSense</span></div>
+          </div>
+        </div>
+        
         </motion.div>
       </main>
 
@@ -143,6 +175,44 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* How it Works Section */}
+      <section className="py-24 bg-slate-900/50 border-y border-white/5" id="how-it-works">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-white mb-4">How it works</h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">Three simple steps to unlock the true value of your YouTube comments.</p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-12 relative">
+            <div className="absolute top-12 left-1/6 right-1/6 h-0.5 bg-gradient-to-r from-accent/0 via-accent/50 to-accent/0 hidden md:block" />
+            
+            <div className="relative text-center">
+              <div className="w-20 h-20 mx-auto bg-slate-800 border-4 border-slate-900 rounded-full flex items-center justify-center text-2xl font-bold text-white mb-6 relative z-10 shadow-xl shadow-black/50">
+                1
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-3">Copy URL</h3>
+              <p className="text-slate-400">Grab the link of any public YouTube video you want to analyze.</p>
+            </div>
+            
+            <div className="relative text-center">
+              <div className="w-20 h-20 mx-auto bg-slate-800 border-4 border-slate-900 rounded-full flex items-center justify-center text-2xl font-bold text-white mb-6 relative z-10 shadow-xl shadow-black/50">
+                2
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-3">AI Processing</h3>
+              <p className="text-slate-400">Our engine extracts all comments and runs them through Google Gemini.</p>
+            </div>
+            
+            <div className="relative text-center">
+              <div className="w-20 h-20 mx-auto bg-accent border-4 border-slate-900 rounded-full flex items-center justify-center text-2xl font-bold text-[#0f172a] mb-6 relative z-10 shadow-xl shadow-accent/20">
+                3
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-3">Export Data</h3>
+              <p className="text-slate-400">Review sentiments, keywords, and export to CSV, Excel, or PDF seamlessly.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Pricing */}
       <section className="py-24 max-w-7xl mx-auto px-6" id="pricing">
          <div className="text-center mb-16">
@@ -160,7 +230,7 @@ export default function LandingPage() {
                 <li className="flex gap-3 text-slate-300"><CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" /> Basic sentiment analysis</li>
                 <li className="flex gap-3 text-slate-300"><CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" /> CSV Export</li>
               </ul>
-              <button className="w-full py-3 rounded-xl font-medium border border-white/10 hover:bg-white/5 transition-colors text-white">Get Started</button>
+              <button onClick={() => navigate('/dashboard')} className="w-full py-3 rounded-xl font-medium border border-white/10 hover:bg-white/5 transition-colors text-white">Get Started Free</button>
             </div>
             
             {/* Pro Tier */}
@@ -176,7 +246,7 @@ export default function LandingPage() {
                 <li className="flex gap-3 text-slate-300"><CheckCircle2 className="w-5 h-5 text-accent shrink-0" /> JSON, CSV, Excel Export</li>
                 <li className="flex gap-3 text-slate-300"><CheckCircle2 className="w-5 h-5 text-accent shrink-0" /> Priority Support</li>
               </ul>
-              <button className="w-full py-3 rounded-xl font-medium btn-primary shadow-md">Upgrade to Pro</button>
+              <button onClick={() => navigate('/dashboard')} className="w-full py-3 rounded-xl font-medium btn-primary shadow-md">Upgrade to Pro</button>
             </div>
 
             {/* Agency Tier */}
@@ -188,19 +258,73 @@ export default function LandingPage() {
                 <li className="flex gap-3 text-slate-300"><CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" /> Custom API Access</li>
                 <li className="flex gap-3 text-slate-300"><CheckCircle2 className="w-5 h-5 text-slate-500 shrink-0" /> White-label reports</li>
               </ul>
-              <button className="w-full py-3 rounded-xl font-medium border border-white/10 hover:bg-white/5 transition-colors text-white">Contact Sales</button>
+              <button onClick={() => window.location.href = 'mailto:hello@analytix.yt'} className="w-full py-3 rounded-xl font-medium border border-white/10 hover:bg-white/5 transition-colors text-white">Contact Sales</button>
             </div>
           </div>
       </section>
       
       {/* Footer */}
-      <footer className="border-t border-white/10 py-12 md:py-16 mt-12">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-           <div className="flex items-center gap-2">
-            <Youtube className="w-5 h-5 text-slate-400" />
-            <span className="text-lg font-bold tracking-tight text-slate-400">Analytix.yt</span>
+      <footer className="border-t border-white/10 py-16 mt-12 bg-slate-950/50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+            <div className="col-span-2 md:col-span-1">
+              <a href="/" className="flex items-center gap-2 mb-4">
+                <LineChart className="w-6 h-6 text-accent" />
+                <span className="text-xl font-bold tracking-tight text-white">Analytix<span className="text-accent">.yt</span></span>
+              </a>
+              <p className="text-slate-400 text-sm mb-6 max-w-xs">
+                The ultimate AI-powered comment analysis engine for creators and marketers. Turn unstructured feedback into clear strategy.
+              </p>
+              <div className="flex gap-4">
+                <a href="#" className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+                  <Twitter className="w-5 h-5" />
+                </a>
+                <a href="#" className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+                  <Github className="w-5 h-5" />
+                </a>
+                <a href="#" className="p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+                  <Linkedin className="w-5 h-5" />
+                </a>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-semibold mb-4">Product</h4>
+              <ul className="space-y-3">
+                <li><a href="#features" className="text-slate-400 hover:text-accent text-sm transition-colors">Features</a></li>
+                <li><a href="#how-it-works" className="text-slate-400 hover:text-accent text-sm transition-colors">How it works</a></li>
+                <li><a href="#pricing" className="text-slate-400 hover:text-accent text-sm transition-colors">Pricing</a></li>
+                <li><a href="/changelog" className="text-slate-400 hover:text-accent text-sm transition-colors">Changelog</a></li>
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-semibold mb-4">Resources</h4>
+              <ul className="space-y-3">
+                <li><a href="https://github.com/analytix" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-accent text-sm transition-colors">Documentation</a></li>
+                <li><a href="/api-guide" className="text-slate-400 hover:text-accent text-sm transition-colors">API Guide</a></li>
+                <li><a href="/blog" className="text-slate-400 hover:text-accent text-sm transition-colors">Blog</a></li>
+                <li><a href="/community" className="text-slate-400 hover:text-accent text-sm transition-colors">Community</a></li>
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-semibold mb-4">Legal</h4>
+              <ul className="space-y-3">
+                <li><a href="/privacy" className="text-slate-400 hover:text-accent text-sm transition-colors">Privacy Policy</a></li>
+                <li><a href="/terms" className="text-slate-400 hover:text-accent text-sm transition-colors">Terms of Service</a></li>
+                <li><a href="/cookies" className="text-slate-400 hover:text-accent text-sm transition-colors">Cookie Policy</a></li>
+              </ul>
+            </div>
           </div>
-          <p className="text-sm text-slate-500">© 2026 Analytix.yt. All rights reserved.</p>
+          
+          <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-slate-500">© 2026 Analytix.yt. All rights reserved.</p>
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              All systems operational
+            </div>
+          </div>
         </div>
       </footer>
     </div>

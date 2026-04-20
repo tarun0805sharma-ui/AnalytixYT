@@ -6,8 +6,9 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { 
-  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, AlertCircle, Zap, BarChart3, PieChart as PieChartIcon
+  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, AlertCircle, Zap, BarChart3, PieChart as PieChartIcon, LineChart, LogOut
 } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import * as xlsx from 'xlsx';
 import jsPDF from 'jspdf';
@@ -38,6 +39,7 @@ const COLORS = ['#10b981', '#f43f5e', '#64748b']; // Emerald, Rose, Slate for po
 export default function DashboardPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const initialUrl = searchParams.get('url') || '';
   
   const [url, setUrl] = useState(initialUrl);
@@ -187,7 +189,10 @@ export default function DashboardPage() {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="font-bold text-lg hidden sm:block text-white">Dashboard</div>
+            <a href="/" className="font-bold text-lg hidden sm:flex items-center gap-1.5 group">
+              <LineChart className="w-5 h-5 text-accent group-hover:scale-105 transition-transform" />
+              <span className="text-white tracking-tight">Analytix<span className="text-accent">.yt</span></span>
+            </a>
           </div>
           
           <form onSubmit={handleSearch} className="flex-1 max-w-2xl flex items-center gap-2">
@@ -212,35 +217,45 @@ export default function DashboardPage() {
             </button>
           </form>
 
-          <div className="relative hidden md:block">
+          <div className="relative hidden md:flex items-center gap-4">
+            <div className="relative">
+              <button 
+                onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
+                disabled={comments.length === 0}
+                className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
+              >
+                <Download className="w-4 h-4" /> Download
+              </button>
+              <AnimatePresence>
+                {downloadMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 flex flex-col"
+                  >
+                    <button onClick={downloadCSV} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Download as CSV
+                    </button>
+                    <button onClick={downloadExcel} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Download as Excel (.xlsx)
+                    </button>
+                    <button onClick={downloadPDF} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Download as PDF
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            
             <button 
-              onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
-              disabled={comments.length === 0}
-              className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
+              onClick={async () => await logout()} 
+              className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+              title="Log out"
             >
-              <Download className="w-4 h-4" /> Download
+              <LogOut className="w-5 h-5" />
             </button>
-            <AnimatePresence>
-              {downloadMenuOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 flex flex-col"
-                >
-                  <button onClick={downloadCSV} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Download as CSV
-                  </button>
-                  <button onClick={downloadExcel} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Download as Excel (.xlsx)
-                  </button>
-                  <button onClick={downloadPDF} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Download as PDF
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
       </nav>

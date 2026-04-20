@@ -53,10 +53,22 @@ async function startServer() {
       const comments: any[] = [];
       let videoTitle = "YouTube_Video";
       
+      // Attempt to fetch the actual video title using oEmbed (works without API key)
+      try {
+        const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+        if (oembedRes.ok) {
+          const oembedData = await oembedRes.json();
+          if (oembedData.title) {
+            videoTitle = oembedData.title;
+          }
+        }
+      } catch (e) {
+        console.log('Failed to fetch video title via oEmbed', e);
+      }
+      
       // If YOUTUBE_API_KEY is not set, we return mock data so the demo works
       if (!process.env.YOUTUBE_API_KEY) {
         console.warn("YOUTUBE_API_KEY not set. Returning mock data for demonstration.");
-        videoTitle = "Mock_Video_Tutorial";
         
         // Generate some realistic mock comments
         const mockSentiments = ['positive', 'negative', 'neutral'];
@@ -86,14 +98,6 @@ async function startServer() {
       } else {
         // Fetch real comments using the Youtube Data API
         try {
-          const videoRes = await youtube.videos.list({
-            part: ['snippet'],
-            id: [videoId]
-          });
-          if (videoRes.data.items && videoRes.data.items.length > 0) {
-            videoTitle = videoRes.data.items[0].snippet?.title || videoTitle;
-          }
-
           const response = await youtube.commentThreads.list({
             part: ['snippet'],
             videoId: videoId,

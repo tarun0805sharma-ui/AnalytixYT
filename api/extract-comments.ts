@@ -19,7 +19,7 @@ const youtube = google.youtube({
   auth: process.env.YOUTUBE_API_KEY,
 });
 
-app.post('/api/extract-comments', async (req, res) => {
+app.post('*', async (req, res) => {
   try {
     const { url } = req.body;
     if (!url) {
@@ -45,9 +45,21 @@ app.post('/api/extract-comments', async (req, res) => {
     const comments: any[] = [];
     let videoTitle = "YouTube_Video";
     
+    // Attempt to fetch the actual video title using oEmbed (works without API key)
+    try {
+      const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json();
+        if (oembedData.title) {
+          videoTitle = oembedData.title;
+        }
+      }
+    } catch (e) {
+      console.log('Failed to fetch video title via oEmbed', e);
+    }
+    
     if (!process.env.YOUTUBE_API_KEY) {
       console.warn("YOUTUBE_API_KEY not set. Returning mock data.");
-      videoTitle = "Mock_Video_Tutorial";
       
       const mockTexts = [
         "This is exactly what I was looking for! Thanks for the great tutorial.",
@@ -74,14 +86,6 @@ app.post('/api/extract-comments', async (req, res) => {
       }
     } else {
       try {
-        const videoRes = await youtube.videos.list({
-          part: ['snippet'],
-          id: [videoId]
-        });
-        if (videoRes.data.items && videoRes.data.items.length > 0) {
-          videoTitle = videoRes.data.items[0].snippet?.title || videoTitle;
-        }
-
         const response = await youtube.commentThreads.list({
           part: ['snippet'],
           videoId: videoId,
