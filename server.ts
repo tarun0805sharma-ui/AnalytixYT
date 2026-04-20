@@ -51,10 +51,12 @@ async function startServer() {
       }
 
       const comments: any[] = [];
+      let videoTitle = "YouTube_Video";
       
       // If YOUTUBE_API_KEY is not set, we return mock data so the demo works
       if (!process.env.YOUTUBE_API_KEY) {
         console.warn("YOUTUBE_API_KEY not set. Returning mock data for demonstration.");
+        videoTitle = "Mock_Video_Tutorial";
         
         // Generate some realistic mock comments
         const mockSentiments = ['positive', 'negative', 'neutral'];
@@ -84,6 +86,14 @@ async function startServer() {
       } else {
         // Fetch real comments using the Youtube Data API
         try {
+          const videoRes = await youtube.videos.list({
+            part: ['snippet'],
+            id: [videoId]
+          });
+          if (videoRes.data.items && videoRes.data.items.length > 0) {
+            videoTitle = videoRes.data.items[0].snippet?.title || videoTitle;
+          }
+
           const response = await youtube.commentThreads.list({
             part: ['snippet'],
             videoId: videoId,
@@ -119,7 +129,7 @@ async function startServer() {
 
       // Analyze with Gemini
       if (comments.length === 0) {
-        return res.status(200).json({ comments: [], analysis: null });
+        return res.status(200).json({ comments: [], analysis: null, videoTitle });
       }
 
       // Limit comments for AI to avoid token limits
@@ -146,7 +156,7 @@ The JSON must follow this exact structure:
       let analysis = null;
       try {
         const result = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.1-flash-preview',
           contents: prompt,
         });
 
@@ -171,7 +181,7 @@ The JSON must follow this exact structure:
         };
       }
 
-      res.json({ comments, analysis });
+      res.json({ comments, analysis, videoTitle });
     } catch (error: any) {
       console.error('Server error:', error);
       res.status(500).json({ error: 'Internal server error' });

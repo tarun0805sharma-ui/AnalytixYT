@@ -6,9 +6,12 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { 
-  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, AlertCircle 
+  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, AlertCircle, Zap, BarChart3, PieChart as PieChartIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as xlsx from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Comment {
   id: string;
@@ -44,6 +47,9 @@ export default function DashboardPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   
+  const [videoTitle, setVideoTitle] = useState('YouTube_Video');
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState('');
 
   const fetchComments = async (targetUrl: string) => {
@@ -55,6 +61,9 @@ export default function DashboardPage() {
       const response = await axios.post('/api/extract-comments', { url: targetUrl });
       setComments(response.data.comments || []);
       setAnalysis(response.data.analysis || null);
+      if (response.data.videoTitle) {
+        setVideoTitle(response.data.videoTitle);
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to extract comments. Please check the URL and try again.');
@@ -74,6 +83,20 @@ export default function DashboardPage() {
     fetchComments(url);
   };
 
+  const getDownloadFilename = (extension: string) => {
+    const date = new Date();
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    // safeTitle replaces non-alphanumerics with underscores and handles multiple underscores
+    const safeTitle = videoTitle.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/_$/, '');
+    
+    return `${safeTitle}_${day}-${month}-${year}_${hours}-${minutes}.${extension}`;
+  };
+
   const downloadCSV = () => {
     if (comments.length === 0) return;
     
@@ -83,17 +106,62 @@ export default function DashboardPage() {
       ...comments.map(c => 
         `"${c.author.replace(/"/g, '""')}","${c.likeCount}","${new Date(c.publishedAt).toLocaleDateString()}","${c.text.replace(/"/g, '""')}"`
       )
-    ].join('\\n');
+    ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'youtube-comments.csv');
+    link.href = URL.createObjectURL(blob);
+    link.download = getDownloadFilename('csv');
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setDownloadMenuOpen(false);
+  };
+
+  const downloadExcel = () => {
+    if (comments.length === 0) return;
+    const data = comments.map(c => ({
+      Author: c.author,
+      Likes: c.likeCount,
+      Date: new Date(c.publishedAt).toLocaleDateString(),
+      Comment: c.text
+    }));
+    const worksheet = xlsx.utils.json_to_sheet(data);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Comments');
+    xlsx.writeFile(workbook, getDownloadFilename('xlsx'));
+    setDownloadMenuOpen(false);
+  };
+
+  const downloadPDF = () => {
+    if (comments.length === 0) return;
+    const doc = new jsPDF();
+    doc.text('YouTube Comments Analysis', 14, 15);
+    doc.text(`Video: ${videoTitle}`, 14, 25);
+    
+    const tableData = comments.map(c => [
+      c.author,
+      c.likeCount.toString(),
+      new Date(c.publishedAt).toLocaleDateString(),
+      c.text
+    ]);
+
+    autoTable(doc, {
+      startY: 30,
+      head: [['Author', 'Likes', 'Date', 'Comment']],
+      body: tableData,
+      styles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 15 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 'auto' }
+      }
+    });
+
+    doc.save(getDownloadFilename('pdf'));
+    setDownloadMenuOpen(false);
   };
 
   const filteredComments = comments.filter(c => 
@@ -144,13 +212,36 @@ export default function DashboardPage() {
             </button>
           </form>
 
-          <button 
-            onClick={downloadCSV}
-            disabled={comments.length === 0}
-            className="hidden md:flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
+          <div className="relative hidden md:block">
+            <button 
+              onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
+              disabled={comments.length === 0}
+              className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
+            >
+              <Download className="w-4 h-4" /> Download
+            </button>
+            <AnimatePresence>
+              {downloadMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 flex flex-col"
+                >
+                  <button onClick={downloadCSV} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Download as CSV
+                  </button>
+                  <button onClick={downloadExcel} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Download as Excel (.xlsx)
+                  </button>
+                  <button onClick={downloadPDF} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Download as PDF
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </nav>
 
