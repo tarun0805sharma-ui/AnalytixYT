@@ -25,6 +25,11 @@ export default function AuthPage() {
       await signInWithPopup(auth, googleProvider);
       navigate('/dashboard');
     } catch (err: any) {
+      if (err?.code === 'auth/popup-closed-by-user') return;
+      if (err?.code === 'auth/unauthorized-domain') {
+        setError('This app URL needs to be added to Firebase Authorized Domains.');
+        return;
+      }
       setError(err.message || 'Failed to authenticate with Google');
     }
   };
@@ -35,6 +40,11 @@ export default function AuthPage() {
       await signInWithPopup(auth, githubProvider);
       navigate('/dashboard');
     } catch (err: any) {
+      if (err?.code === 'auth/popup-closed-by-user') return;
+      if (err?.code === 'auth/unauthorized-domain') {
+        setError('This app URL needs to be added to Firebase Authorized Domains.');
+        return;
+      }
       setError(err.message || 'Failed to authenticate with GitHub');
     }
   };
@@ -51,7 +61,13 @@ export default function AuthPage() {
       }
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found' || err?.code === 'auth/wrong-password') {
+        setError('Invalid email or password.');
+      } else if (err?.code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists.');
+      } else {
+        setError(err.message || 'Authentication failed');
+      }
     } finally {
       setLoading(false);
     }
