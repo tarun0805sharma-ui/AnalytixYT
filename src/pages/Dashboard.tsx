@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import { 
-  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, AlertCircle, Zap, BarChart3, PieChart as PieChartIcon, LineChart, LogOut
+  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, AlertCircle, Zap, BarChart3, PieChart as PieChartIcon, LineChart, LogOut, Smile, Meh, Frown
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -310,39 +310,57 @@ export default function DashboardPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
-                  className="glass-panel p-6 sm:p-8 rounded-2xl"
+                  className="glass-panel p-6 sm:p-8 rounded-2xl flex flex-col justify-center"
                 >
-                  <h3 className="font-semibold text-lg mb-6 text-white flex items-center gap-2">
+                  <h3 className="font-semibold text-lg mb-8 text-white flex items-center gap-2">
                     <PieChartIcon className="w-5 h-5 text-accent" />
-                    Sentiment Analysis
+                    Sentiment Overview
                   </h3>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {pieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip formatter={(value: number) => `${value}%`} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex justify-center gap-4 mt-4 text-sm">
-                    {pieData.map((entry, index) => (
-                      <div key={entry.name} className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index] }}></div>
-                        <span className="text-slate-400">{entry.name} ({entry.value}%)</span>
+
+                  <div className="space-y-8">
+                    {/* Segmented Bar */}
+                    <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex gap-1 cursor-crosshair">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${analysis.sentiment.positive}%` }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                        className="h-full bg-emerald-500 rounded-l-full" 
+                        title={`Positive: ${analysis.sentiment.positive}%`}
+                      />
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${analysis.sentiment.neutral}%` }}
+                        transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
+                        className="h-full bg-slate-500" 
+                        title={`Neutral: ${analysis.sentiment.neutral}%`}
+                      />
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${analysis.sentiment.negative}%` }}
+                        transition={{ duration: 1, ease: "easeOut", delay: 0.4 }}
+                        className="h-full bg-rose-500 rounded-r-full" 
+                        title={`Negative: ${analysis.sentiment.negative}%`}
+                      />
+                    </div>
+
+                    {/* Stat Cards */}
+                    <div className="grid grid-cols-3 gap-3 md:gap-4">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 md:p-4 flex flex-col items-center justify-center text-center transform transition-transform hover:scale-105">
+                        <Smile className="w-6 h-6 text-emerald-400 mb-2" strokeWidth={2.5} />
+                        <div className="text-xl md:text-2xl font-bold text-white">{analysis.sentiment.positive}%</div>
+                        <div className="text-[10px] md:text-xs font-semibold text-emerald-400 uppercase tracking-wider mt-1">Positive</div>
                       </div>
-                    ))}
+                      <div className="bg-slate-500/10 border border-slate-500/20 rounded-xl p-3 md:p-4 flex flex-col items-center justify-center text-center transform transition-transform hover:scale-105">
+                        <Meh className="w-6 h-6 text-slate-400 mb-2" strokeWidth={2.5} />
+                        <div className="text-xl md:text-2xl font-bold text-white">{analysis.sentiment.neutral}%</div>
+                        <div className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider mt-1">Neutral</div>
+                      </div>
+                      <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 md:p-4 flex flex-col items-center justify-center text-center transform transition-transform hover:scale-105">
+                        <Frown className="w-6 h-6 text-rose-400 mb-2" strokeWidth={2.5} />
+                        <div className="text-xl md:text-2xl font-bold text-white">{analysis.sentiment.negative}%</div>
+                        <div className="text-[10px] md:text-xs font-semibold text-rose-400 uppercase tracking-wider mt-1">Negative</div>
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -357,22 +375,31 @@ export default function DashboardPage() {
                 >
                   <h3 className="font-semibold text-lg mb-6 text-white flex items-center gap-2">
                     <BarChart3 className="w-5 h-5 text-accent" />
-                    Top Keywords
+                    Frequently Mentioned
                   </h3>
-                  <div className="h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={analysis.keywords} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="word" type="category" width={80} tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                        <RechartsTooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={{ borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#1e293b', color: '#f8fafc', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.3)' }} />
-                        <Bar dataKey="count" fill="#4F46E5" radius={[0, 4, 4, 0]} barSize={20}>
-                          {analysis.keywords.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={index < 3 ? 'var(--accent)' : 'rgba(255,255,255,0.1)'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className="space-y-4 md:space-y-5 pt-2">
+                    {analysis.keywords.map((keyword, idx) => {
+                       const maxCount = Math.max(...analysis.keywords.map(k => k.count));
+                       const percentage = (keyword.count / maxCount) * 100;
+                       return (
+                         <div key={idx} className="flex items-center gap-3 md:gap-4 group">
+                            <div className="w-24 md:w-32 truncate text-sm font-medium text-slate-300 group-hover:text-white transition-colors capitalize">
+                               {keyword.word}
+                            </div>
+                            <div className="flex-1 h-3 bg-slate-800/50 rounded-full overflow-hidden">
+                               <motion.div 
+                                 initial={{ width: 0 }}
+                                 animate={{ width: `${percentage}%` }}
+                                 transition={{ duration: 1, delay: 0.1 * idx, ease: "easeOut" }}
+                                 className={`h-full rounded-full ${idx < 3 ? 'bg-gradient-to-r from-blue-600 to-cyan-400' : 'bg-slate-600'}`}
+                               />
+                            </div>
+                            <div className="w-8 md:w-12 text-right text-sm font-mono text-slate-400 group-hover:text-accent font-medium transition-colors">
+                               {keyword.count}
+                            </div>
+                         </div>
+                       )
+                    })}
                   </div>
                 </motion.div>
               )}

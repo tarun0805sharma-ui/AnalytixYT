@@ -54,9 +54,9 @@ export default function LandingPage() {
         <div className="flex items-center gap-4">
           {user ? (
             <>
-              <button onClick={() => navigate('/dashboard')} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-white transition-colors">Dashboard</button>
-              <button onClick={async () => await logout()} className="btn-primary px-5 py-2.5 rounded-full transition-all flex items-center gap-2">
-                Log out <LogOut className="w-4 h-4" />
+              <button onClick={async () => await logout()} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-white transition-colors">Log out</button>
+              <button onClick={() => navigate('/dashboard')} className="btn-primary px-5 py-2.5 rounded-full transition-all flex items-center gap-2">
+                Go to Dashboard <ChevronRight className="w-4 h-4" />
               </button>
             </>
           ) : (
