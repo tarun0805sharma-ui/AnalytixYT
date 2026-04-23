@@ -11,8 +11,8 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, githubProvider } from '../lib/firebase';
 
-export default function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
+export default function AuthPage({ isSignUp = false }: { isSignUp?: boolean }) {
+  const [isLogin, setIsLogin] = useState(!isSignUp);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

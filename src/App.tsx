@@ -17,7 +17,8 @@ export default function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/dashboard" />} />
-      <Route path="/dashboard" element={user ? <DashboardPage /> : <Navigate to="/auth" />} />
+      <Route path="/signup" element={!user ? <AuthPage isSignUp={true} /> : <Navigate to="/dashboard" />} />
+      <Route path="/dashboard" element={<DashboardPage />} />
       
       {/* Legal & Footer Routes */}
       <Route path="/privacy" element={<PrivacyPolicy />} />

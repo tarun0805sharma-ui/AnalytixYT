@@ -72,6 +72,7 @@ async function startServer() {
         
         // Generate some realistic mock comments
         const mockSentiments = ['positive', 'negative', 'neutral'];
+        const realisticNames = ['Alex Dev', 'SarahJ', 'TechNinja', 'CodeMaster', 'WebDev2026', 'DataGuru', 'Jane Doe', 'CryptoKing', 'DesignPro', 'MusicLover99', 'GamerGuy', 'Reviewer101', 'StartupFounder', 'ProductManager', 'UX_Expert'];
         const mockTexts = [
           "This is exactly what I was looking for! Thanks for the great tutorial.",
           "I'm getting an error at 5:23, anyone know how to fix it?",
@@ -88,9 +89,9 @@ async function startServer() {
         for (let i = 0; i < 25; i++) {
           comments.push({
             id: `mock-${i}`,
-            author: `User${Math.floor(Math.random() * 1000)}`,
+            author: realisticNames[i % realisticNames.length] + (i > 14 ? i.toString() : ''),
             authorProfileImageUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${i}`,
-            text: mockTexts[i % mockTexts.length] + (i > 9 ? ` (${i})` : ''),
+            text: mockTexts[i % mockTexts.length],
             likeCount: Math.floor(Math.random() * 500),
             publishedAt: new Date(Date.now() - Math.random() * 10000000000).toISOString()
           });

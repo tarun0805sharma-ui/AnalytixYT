@@ -62,8 +62,8 @@ export default function LandingPage() {
           ) : (
             <>
               <button onClick={() => navigate('/auth')} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-white transition-colors">Log in</button>
-              <button onClick={() => navigate('/auth')} className="btn-primary px-5 py-2.5 rounded-full transition-all flex items-center gap-2">
-                Get Started Free <ChevronRight className="w-4 h-4" />
+              <button onClick={() => navigate('/signup')} className="btn-primary px-5 py-2.5 rounded-full transition-all flex items-center gap-2">
+                Sign up <ChevronRight className="w-4 h-4" />
               </button>
             </>
           )}

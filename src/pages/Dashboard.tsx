@@ -39,7 +39,7 @@ const COLORS = ['#10b981', '#f43f5e', '#64748b']; // Emerald, Rose, Slate for po
 export default function DashboardPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const initialUrl = searchParams.get('url') || '';
   
   const [url, setUrl] = useState(initialUrl);
@@ -50,12 +50,43 @@ export default function DashboardPage() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   
   const [videoTitle, setVideoTitle] = useState('YouTube_Video');
+  const [userTier, setUserTier] = useState<'hobby' | 'pro' | 'agency'>((localStorage.getItem('dev_tier') as 'hobby' | 'pro' | 'agency') || 'hobby');
+  
+  // Update localStorage when developer changes tier
+  useEffect(() => {
+    localStorage.setItem('dev_tier', userTier);
+  }, [userTier]);
+
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [showSignUpModal, setShowSignUpModal] = useState(false);
+  const [signUpModalMessage, setSignUpModalMessage] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
 
+  const checkAndIncrementGuestAttempts = (): boolean => {
+    if (user) return true;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const key = `analytix_guest_attempts_${today}`;
+    const attempts = parseInt(localStorage.getItem(key) || '0', 10);
+    
+    if (attempts >= 10) {
+      setSignUpModalMessage('You have reached your daily limit of 10 free analyses. Please sign up for an account to continue tracking comments!');
+      setShowSignUpModal(true);
+      return false;
+    }
+    
+    localStorage.setItem(key, (attempts + 1).toString());
+    return true;
+  };
+
   const fetchComments = async (targetUrl: string) => {
     if (!targetUrl) return;
+    
+    if (!checkAndIncrementGuestAttempts()) {
+      return;
+    }
+
     setLoading(true);
     setError('');
     
@@ -99,13 +130,38 @@ export default function DashboardPage() {
     return `${safeTitle}_${day}-${month}-${year}_${hours}-${minutes}.${extension}`;
   };
 
+  const handleDownloadAttempt = (format: 'csv' | 'excel' | 'pdf' | 'json', downloadFn: () => void) => {
+    setDownloadMenuOpen(false);
+
+    if (!user) {
+      setSignUpModalMessage('Please log in or sign up for an account to download the full comment records and analysis.');
+      setShowSignUpModal(true);
+      return;
+    }
+
+    if (userTier === 'hobby' && format !== 'csv') {
+      setSignUpModalMessage(`Downloading in ${format.toUpperCase()} format requires a Pro or Agency subscription. Hobby tier is limited to CSV exports only.`);
+      setShowSignUpModal(true);
+      return;
+    }
+
+    downloadFn();
+  };
+
+  const getLimitedComments = () => {
+    if (userTier === 'hobby') return comments.slice(0, 100);
+    if (userTier === 'pro') return comments.slice(0, 10000);
+    return comments; // agency unlimited
+  };
+
   const downloadCSV = () => {
-    if (comments.length === 0) return;
+    const targetComments = getLimitedComments();
+    if (targetComments.length === 0) return;
     
     const headers = ['Author', 'Likes', 'Date', 'Comment'];
     const csvContent = [
       headers.join(','),
-      ...comments.map(c => 
+      ...targetComments.map(c => 
         `"${c.author.replace(/"/g, '""')}","${c.likeCount}","${new Date(c.publishedAt).toLocaleDateString()}","${c.text.replace(/"/g, '""')}"`
       )
     ].join('\n');
@@ -122,8 +178,9 @@ export default function DashboardPage() {
   };
 
   const downloadExcel = () => {
-    if (comments.length === 0) return;
-    const data = comments.map(c => ({
+    const targetComments = getLimitedComments();
+    if (targetComments.length === 0) return;
+    const data = targetComments.map(c => ({
       Author: c.author,
       Likes: c.likeCount,
       Date: new Date(c.publishedAt).toLocaleDateString(),
@@ -136,13 +193,33 @@ export default function DashboardPage() {
     setDownloadMenuOpen(false);
   };
 
+  const downloadJSON = () => {
+    const targetComments = getLimitedComments();
+    if (targetComments.length === 0) return;
+    const jsonStr = JSON.stringify(targetComments, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = getDownloadFilename('json');
+    link.click();
+    setDownloadMenuOpen(false);
+  };
+
   const downloadPDF = () => {
-    if (comments.length === 0) return;
+    const targetComments = getLimitedComments();
+    if (targetComments.length === 0) return;
     const doc = new jsPDF();
     doc.text('YouTube Comments Analysis', 14, 15);
     doc.text(`Video: ${videoTitle}`, 14, 25);
     
-    const tableData = comments.map(c => [
+    // Add Branding only for lower tiers!
+    if (userTier !== 'agency') {
+      doc.setFontSize(9);
+      doc.setTextColor(150);
+      doc.text('Generated by Analytix.yt', 14, 290);
+    }
+    
+    const tableData = targetComments.map(c => [
       c.author,
       c.likeCount.toString(),
       new Date(c.publishedAt).toLocaleDateString(),
@@ -218,6 +295,19 @@ export default function DashboardPage() {
           </form>
 
           <div className="relative hidden md:flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-white/10 mr-2">
+               <span className="text-[10px] text-slate-400 pl-2 pr-1 uppercase tracking-wider font-bold">Dev Test:</span>
+               {(['hobby', 'pro', 'agency'] as const).map(t => (
+                 <button 
+                   key={t}
+                   onClick={() => setUserTier(t)}
+                   className={`px-2 py-0.5 text-xs rounded transition-colors capitalize ${userTier === t ? 'bg-accent text-[#0f172a] font-semibold' : 'text-slate-400 hover:text-white'}`}
+                 >
+                   {t}
+                 </button>
+               ))}
+            </div>
+
             <div className="relative">
               <button 
                 onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
@@ -235,14 +325,21 @@ export default function DashboardPage() {
                     transition={{ duration: 0.2 }}
                     className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 flex flex-col"
                   >
-                    <button onClick={downloadCSV} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Download as CSV
+                    <button onClick={() => handleDownloadAttempt('csv', downloadCSV)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Download CSV</div>
+                      <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-slate-400">Hobby+</span>
                     </button>
-                    <button onClick={downloadExcel} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Download as Excel (.xlsx)
+                    <button onClick={() => handleDownloadAttempt('json', downloadJSON)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Download JSON</div>
+                      <span className="text-[10px] bg-accent/20 px-1.5 py-0.5 rounded text-accent">Pro+</span>
                     </button>
-                    <button onClick={downloadPDF} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Download as PDF
+                    <button onClick={() => handleDownloadAttempt('excel', downloadExcel)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Download Excel</div>
+                      <span className="text-[10px] bg-accent/20 px-1.5 py-0.5 rounded text-accent">Pro+</span>
+                    </button>
+                    <button onClick={() => handleDownloadAttempt('pdf', downloadPDF)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Download PDF</div>
+                      <span className="text-[10px] bg-accent/20 px-1.5 py-0.5 rounded text-accent">Pro+</span>
                     </button>
                   </motion.div>
                 )}
@@ -488,6 +585,54 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+      {/* Auth Modal directly nested for guests */}
+      <AnimatePresence>
+        {showSignUpModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-800 border border-white/10 p-8 rounded-3xl max-w-md w-full text-center relative"
+            >
+              <button 
+                onClick={() => setShowSignUpModal(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+              <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Lock className="w-8 h-8 text-accent" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-4">Upgrade Required</h2>
+              <p className="text-slate-300 mb-8 leading-relaxed">
+                {signUpModalMessage}
+              </p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => { setShowSignUpModal(false); navigate(user ? '/#pricing' : '/signup'); }} 
+                  className="w-full btn-primary px-6 py-3 rounded-xl font-medium"
+                >
+                  {user ? "View Plans" : "Create Free Account"}
+                </button>
+                {!user && (
+                 <button 
+                   onClick={() => navigate('/auth')} 
+                   className="w-full px-6 py-3 rounded-xl font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+                 >
+                   Log In
+                 </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
