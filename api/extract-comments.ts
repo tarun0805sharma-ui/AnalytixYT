@@ -1,6 +1,5 @@
 import express from 'express';
 import { google } from 'googleapis';
-import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import cors from 'cors';
 
@@ -9,10 +8,6 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
 
 const youtube = google.youtube({
   version: 'v3',
@@ -119,57 +114,7 @@ app.post('*', async (req, res) => {
       }
     }
 
-    if (comments.length === 0) {
-      return res.status(200).json({ comments: [], analysis: null, videoTitle });
-    }
-
-    const commentsForAI = comments.slice(0, 50).map(c => c.text);
-    
-    const prompt = `Analyze these YouTube comments and provide a structured JSON response. 
-Comments: ${JSON.stringify(commentsForAI)}
-
-You must return ONLY a raw JSON object with no markdown formatting or block quotes.
-The JSON must follow this exact structure:
-{
-  "sentiment": {
-    "positive": number (percentage 0-100),
-    "negative": number (percentage 0-100),
-    "neutral": number (percentage 0-100)
-  },
-  "keywords": [
-    { "word": "keyword", "count": number }
-  ],
-  "complaints": [ "string" ],
-  "summary": "string"
-}`;
-
-    let analysis = null;
-    try {
-      const result = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-preview',
-        contents: prompt,
-      });
-
-      const textResult = result.text;
-      if (textResult) {
-          const cleanedText = textResult.replace(/^```json/g, '').replace(/```$/g, '').trim();
-          analysis = JSON.parse(cleanedText);
-      }
-    } catch (aiError) {
-      console.error("AI Analysis Error:", aiError);
-      analysis = {
-        sentiment: { positive: 65, negative: 15, neutral: 20 },
-        keywords: [
-          { word: "video", count: 12 },
-          { word: "tutorial", count: 8 },
-          { word: "thanks", count: 7 }
-        ],
-        complaints: ["Audio could be clearer", "Video pace is a bit too fast"],
-        summary: "Overall, the audience found the content very helpful and appreciated the clarity. A few users mentioned minor issues with audio quality."
-      };
-    }
-
-    res.json({ comments, analysis, videoTitle });
+    res.json({ comments, analysis: null, videoTitle });
   } catch (error: any) {
     console.error('Server error:', error);
     res.status(500).json({ error: 'Internal server error' });

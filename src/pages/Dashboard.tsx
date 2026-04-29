@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { GoogleGenAI } from '@google/genai';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
 import { 
-  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, AlertCircle, Zap, BarChart3, PieChart as PieChartIcon, LineChart, LogOut, Smile, Meh, Frown
+  ArrowLeft, Download, RefreshCcw, Search, MessageSquare, ThumbsUp, ThumbsDown, AlertCircle, Zap, BarChart3, PieChart as PieChartIcon, LineChart, LogOut, Smile, Meh, Frown, Lock, Youtube, Users, Eye, Share2
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import * as xlsx from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { Tooltip } from '../components/Tooltip';
 
 interface Comment {
   id: string;
@@ -48,20 +48,18 @@ export default function DashboardPage() {
   
   const [comments, setComments] = useState<Comment[]>([]);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [videoStats, setVideoStats] = useState<any>(null);
   
   const [videoTitle, setVideoTitle] = useState('YouTube_Video');
-  const [userTier, setUserTier] = useState<'hobby' | 'pro' | 'agency'>((localStorage.getItem('dev_tier') as 'hobby' | 'pro' | 'agency') || 'hobby');
-  
-  // Update localStorage when developer changes tier
-  useEffect(() => {
-    localStorage.setItem('dev_tier', userTier);
-  }, [userTier]);
-
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [showSignUpModal, setShowSignUpModal] = useState(false);
   const [signUpModalMessage, setSignUpModalMessage] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [visibleCount, setVisibleCount] = useState(100);
+  
+  // TODO: Retrieve actual user tier from AuthContext or billing backend
+  const userTier: string = 'free';
 
   const checkAndIncrementGuestAttempts = (): boolean => {
     if (user) return true;
@@ -89,13 +87,24 @@ export default function DashboardPage() {
 
     setLoading(true);
     setError('');
+    setVisibleCount(100);
+    setSearchTerm('');
     
     try {
-      const response = await axios.post('/api/extract-comments', { url: targetUrl });
+      const response = await fetch('/api/extract-comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl })
+      });
+      
+      const responseData = await response.json();
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Failed to extract comments. Please check the URL and try again.');
+      }
       
       // Front-end override to ensure realistic names even if backend is stale
       const realisticNames = ['Alex Dev', 'SarahJ', 'TechNinja', 'CodeMaster', 'WebDev2026', 'DataGuru', 'Jane Doe', 'CryptoKing', 'DesignPro', 'MusicLover99', 'GamerGuy', 'Reviewer101', 'StartupFounder', 'ProductManager', 'UX_Expert'];
-      const fixedComments = (response.data.comments || []).map((c: any) => {
+      const fixedComments = (responseData.comments || []).map((c: any) => {
          if (c.author && c.author.startsWith('User') && c.author.length <= 8) {
              const hash = c.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
              return { ...c, author: realisticNames[hash % realisticNames.length] };
@@ -104,13 +113,73 @@ export default function DashboardPage() {
       });
 
       setComments(fixedComments);
-      setAnalysis(response.data.analysis || null);
-      if (response.data.videoTitle) {
-        setVideoTitle(response.data.videoTitle);
+      
+      if (responseData.videoTitle) {
+        setVideoTitle(responseData.videoTitle);
       }
+      if (responseData.videoStats) {
+        setVideoStats(responseData.videoStats);
+      } else {
+        setVideoStats(null);
+      }
+
+      // Run AI analysis locally in the frontend
+      if (fixedComments.length > 0) {
+        setAnalysis(null); // clear old
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const commentsForAI = fixedComments.slice(0, 100).map(c => c.text);
+        const prompt = `Analyze these YouTube comments and provide a structured JSON response. 
+Comments: ${JSON.stringify(commentsForAI)}
+
+You must return ONLY a raw JSON object.
+The JSON must follow this exact structure:
+{
+  "sentiment": {
+    "positive": number (percentage 0-100),
+    "negative": number (percentage 0-100),
+    "neutral": number (percentage 0-100)
+  },
+  "keywords": [
+    { "word": "keyword", "count": number }
+  ] (Top 10 keywords/topics),
+  "complaints": [ "string" ] (Top 3 common complaints or issues, if any),
+  "summary": "string" (A 2-3 sentence overview of audience opinion)
+}`;
+
+        try {
+          const result = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json"
+            }
+          });
+
+          const textResult = result.text;
+          if (textResult) {
+              const cleanedText = textResult.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+              setAnalysis(JSON.parse(cleanedText));
+          }
+        } catch (aiError: any) {
+          console.error("AI Analysis Error:", aiError);
+          // Fallback analysis if Gemini fails
+          setAnalysis({
+            sentiment: { positive: 65, negative: 15, neutral: 20 },
+            keywords: [
+              { word: "error", count: 1 },
+              { word: "analysis", count: 1 }
+            ],
+            complaints: [`AI Analysis failed: ${aiError.message || "Unknown error"}`],
+            summary: "Could not perform live AI analysis. Defaulting to fallback data. Please check logs."
+          });
+        }
+      } else {
+        setAnalysis(null);
+      }
+
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.error || 'Failed to extract comments. Please check the URL and try again.');
+      setError(err.message || 'Failed to extract comments. Please check the URL and try again.');
     } finally {
       setLoading(false);
     }
@@ -141,18 +210,11 @@ export default function DashboardPage() {
     return `${safeTitle}_${day}-${month}-${year}_${hours}-${minutes}.${extension}`;
   };
 
-  const handleDownloadAttempt = (format: 'csv' | 'excel' | 'pdf' | 'json', downloadFn: () => void) => {
+  const handleDownloadAttempt = (format: 'csv' | 'excel' | 'pdf' | 'json' | 'analysis-pdf' | 'analysis-text', downloadFn: () => void) => {
     setDownloadMenuOpen(false);
 
-    // Dev Test Override: If developer explicitly set a higher tier, bypass login requirement
-    if (!user && userTier === 'hobby') {
+    if (!user) {
       setSignUpModalMessage('Please log in or sign up for an account to download the full comment records and analysis.');
-      setShowSignUpModal(true);
-      return;
-    }
-
-    if (userTier === 'hobby' && format !== 'csv') {
-      setSignUpModalMessage(`Downloading in ${format.toUpperCase()} format requires a Pro or Agency subscription. Hobby tier is limited to CSV exports only.`);
       setShowSignUpModal(true);
       return;
     }
@@ -161,9 +223,7 @@ export default function DashboardPage() {
   };
 
   const getLimitedComments = () => {
-    if (userTier === 'hobby') return comments.slice(0, 100);
-    if (userTier === 'pro') return comments.slice(0, 10000);
-    return comments; // agency unlimited
+    return comments;
   };
 
   const downloadCSV = () => {
@@ -178,7 +238,7 @@ export default function DashboardPage() {
       )
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = getDownloadFilename('csv');
@@ -217,9 +277,13 @@ export default function DashboardPage() {
     setDownloadMenuOpen(false);
   };
 
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
     const targetComments = getLimitedComments();
     if (targetComments.length === 0) return;
+    
+    const { jsPDF } = await import('jspdf');
+    const autoTable = (await import('jspdf-autotable')).default;
+    
     const doc = new jsPDF();
     doc.text('YouTube Comments Analysis', 14, 15);
     doc.text(`Video: ${videoTitle}`, 14, 25);
@@ -255,10 +319,137 @@ export default function DashboardPage() {
     setDownloadMenuOpen(false);
   };
 
-  const filteredComments = comments.filter(c => 
-    c.text.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.author.toLowerCase().includes(searchTerm.toLowerCase())
+  const downloadAnalysisText = () => {
+    if (!analysis) return;
+    
+    const textContent = `
+YouTube Comments AI Analysis
+Video: ${videoTitle}
+Date: ${new Date().toLocaleDateString()}
+
+--- SUMMARY ---
+${analysis.summary}
+
+--- SENTIMENT ---
+Positive: ${analysis.sentiment.positive}%
+Neutral: ${analysis.sentiment.neutral}%
+Negative: ${analysis.sentiment.negative}%
+
+--- KEYWORDS ---
+${analysis.keywords.map(k => `${k.word} (${k.count})`).join('\n')}
+
+--- TOP COMPLAINTS/ISSUES ---
+${analysis.complaints.map(c => `- ${c}`).join('\n')}
+    `.trim();
+
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = getDownloadFilename('analysis.txt');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setDownloadMenuOpen(false);
+  };
+
+  const downloadAnalysisPDF = async () => {
+    if (!analysis) return;
+    
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text('YouTube Comments AI Analysis', 14, 20);
+    
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Video: ${videoTitle}`, 14, 30);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 36);
+
+    let yPos = 48;
+    
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text('Summary', 14, yPos);
+    yPos += 6;
+    
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    const splitSummary = doc.splitTextToSize(analysis.summary, 180);
+    doc.text(splitSummary, 14, yPos);
+    yPos += (splitSummary.length * 6) + 8;
+
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text('Sentiment', 14, yPos);
+    yPos += 6;
+    
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Positive: ${analysis.sentiment.positive}%`, 14, yPos);
+    yPos += 6;
+    doc.text(`Neutral: ${analysis.sentiment.neutral}%`, 14, yPos);
+    yPos += 6;
+    doc.text(`Negative: ${analysis.sentiment.negative}%`, 14, yPos);
+    yPos += 12;
+
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text('Keywords', 14, yPos);
+    yPos += 6;
+    
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    let keywordsStr = analysis.keywords.map(k => `${k.word} (${k.count})`).join(', ');
+    const splitKeywords = doc.splitTextToSize(keywordsStr, 180);
+    doc.text(splitKeywords, 14, yPos);
+    yPos += (splitKeywords.length * 6) + 8;
+
+    if (analysis.complaints.length > 0) {
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text('Top Complaints', 14, yPos);
+      yPos += 6;
+      
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      analysis.complaints.forEach(c => {
+        const splitComplaint = doc.splitTextToSize(`• ${c}`, 180);
+        if (yPos + (splitComplaint.length * 6) > 280) {
+            doc.addPage();
+            yPos = 20;
+        }
+        doc.text(splitComplaint, 14, yPos);
+        yPos += (splitComplaint.length * 6) + 2;
+      });
+    }
+
+    if (userTier !== 'agency') {
+      doc.setFontSize(9);
+      doc.setTextColor(150);
+      doc.text('Generated by Analytix.yt', 14, 290);
+    }
+
+    doc.save(getDownloadFilename('analysis.pdf'));
+    setDownloadMenuOpen(false);
+  };
+
+  const formatStat = (numStr: string | null | undefined) => {
+    if (!numStr) return "0";
+    if (numStr.endsWith('M') || numStr.endsWith('K')) return numStr;
+    const num = parseInt(numStr, 10);
+    if (isNaN(num)) return numStr;
+    return new Intl.NumberFormat('en-US', { notation: 'compact' }).format(num);
+  };
+
+  const fullFilteredComments = comments.filter(c => 
+    (c.text || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (c.author || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+  
+  // UI limit for rendering performance (avoids crashing tabs on 20,000+ items)
+  const renderedComments = fullFilteredComments.slice(0, visibleCount);
 
   const pieData = analysis?.sentiment ? [
     { name: 'Positive', value: analysis.sentiment.positive || 0 },
@@ -297,37 +488,29 @@ export default function DashboardPage() {
                 className="block w-full pl-10 pr-3 py-2 border border-white/10 rounded-xl text-sm bg-slate-900/50 text-white placeholder-slate-400 focus:bg-slate-900/80 focus:ring-2 focus:ring-accent focus:border-accent outline-none transition-all"
               />
             </div>
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="btn-primary px-4 py-2 rounded-xl text-sm disabled:opacity-70 flex items-center gap-2"
-            >
-              {loading ? <RefreshCcw className="w-4 h-4 animate-spin text-[#0f172a]" /> : <span className="text-[#0f172a]">Analyze</span>}
-            </button>
+            <Tooltip content="Extract and analyze comments from the provided video URL" side="bottom">
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="btn-primary px-4 py-2 rounded-xl text-sm disabled:opacity-70 flex items-center gap-2"
+              >
+                {loading ? <RefreshCcw className="w-4 h-4 animate-spin text-[#0f172a]" /> : <span className="text-[#0f172a]">Analyze</span>}
+              </button>
+            </Tooltip>
           </form>
 
           <div className="relative hidden md:flex items-center gap-4">
-            <div className="hidden lg:flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-white/10 mr-2">
-               <span className="text-[10px] text-slate-400 pl-2 pr-1 uppercase tracking-wider font-bold">Dev Test:</span>
-               {(['hobby', 'pro', 'agency'] as const).map(t => (
-                 <button 
-                   key={t}
-                   onClick={() => setUserTier(t)}
-                   className={`px-2 py-0.5 text-xs rounded transition-colors capitalize ${userTier === t ? 'bg-accent text-[#0f172a] font-semibold' : 'text-slate-400 hover:text-white'}`}
-                 >
-                   {t}
-                 </button>
-               ))}
-            </div>
 
             <div className="relative">
-              <button 
-                onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
-                disabled={comments.length === 0}
-                className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
-              >
-                <Download className="w-4 h-4" /> Download
-              </button>
+              <Tooltip content="Export data in various formats" side="bottom">
+                <button 
+                  onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
+                  disabled={comments.length === 0}
+                  className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
+                >
+                  <Download className="w-4 h-4" /> Download
+                </button>
+              </Tooltip>
               <AnimatePresence>
                 {downloadMenuOpen && (
                   <motion.div
@@ -339,32 +522,41 @@ export default function DashboardPage() {
                   >
                     <button onClick={() => handleDownloadAttempt('csv', downloadCSV)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
                       <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Download CSV</div>
-                      <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-slate-400">Hobby+</span>
                     </button>
                     <button onClick={() => handleDownloadAttempt('json', downloadJSON)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
                       <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Download JSON</div>
-                      <span className="text-[10px] bg-accent/20 px-1.5 py-0.5 rounded text-accent">Pro+</span>
                     </button>
                     <button onClick={() => handleDownloadAttempt('excel', downloadExcel)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
                       <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Download Excel</div>
-                      <span className="text-[10px] bg-accent/20 px-1.5 py-0.5 rounded text-accent">Pro+</span>
                     </button>
-                    <button onClick={() => handleDownloadAttempt('pdf', downloadPDF)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors flex items-center justify-between">
+                    <button onClick={() => handleDownloadAttempt('pdf', downloadPDF)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
                       <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Download PDF</div>
-                      <span className="text-[10px] bg-accent/20 px-1.5 py-0.5 rounded text-accent">Pro+</span>
                     </button>
+                    {analysis && (
+                      <>
+                        <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider bg-black/20 border-b border-white/5">Analysis</div>
+                        <button onClick={() => handleDownloadAttempt('analysis-text', downloadAnalysisText)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors border-b border-white/5 flex items-center justify-between">
+                          <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Analysis (TXT)</div>
+                        </button>
+                        <button onClick={() => handleDownloadAttempt('analysis-pdf', downloadAnalysisPDF)} className="text-left px-4 py-3 hover:bg-white/5 text-sm text-slate-300 hover:text-white transition-colors flex items-center justify-between">
+                          <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span> Analysis (PDF)</div>
+                        </button>
+                      </>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
             
-            <button 
-              onClick={async () => await logout()} 
-              className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
-              title="Log out"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+            <Tooltip content="Sign out of your account" side="bottom">
+              <button 
+                onClick={async () => await logout()} 
+                className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                aria-label="Log out"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </nav>
@@ -394,9 +586,87 @@ export default function DashboardPage() {
         )}
 
         {!loading && comments.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column: Analysis Dashboard */}
-            <div className="lg:col-span-1 space-y-6">
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold mb-1 flex items-center gap-1.5"><Youtube className="w-3.5 h-3.5 text-red-500" /> Analysed Video</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight line-clamp-2" title={videoTitle}>
+                  {videoTitle === "YouTube_Video" ? "YouTube Video Analysis" : videoTitle}
+                </h1>
+              </div>
+              
+              <div className="flex md:hidden items-center gap-2">
+                <Tooltip content="Export data in various formats" side="bottom">
+                  <button 
+                    onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
+                    disabled={comments.length === 0}
+                    className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-white"
+                  >
+                    <Download className="w-4 h-4" /> Download
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+
+            {videoStats && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"
+              >
+                 <div className="glass-panel p-4 sm:p-5 rounded-2xl col-span-2 flex flex-col justify-center">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <Youtube className="w-4 h-4 text-red-500" />
+                      <span className="text-[11px] uppercase tracking-wider font-semibold">Channel</span>
+                    </div>
+                    <div className="text-lg md:text-xl font-bold text-white truncate" title={videoStats.channelName}>
+                      {videoStats.channelName}
+                    </div>
+                 </div>
+                 
+                 <div className="glass-panel p-4 sm:p-5 rounded-2xl flex flex-col justify-center">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <Users className="w-4 h-4" />
+                      <span className="text-[11px] uppercase tracking-wider font-semibold">Subs</span>
+                    </div>
+                    <div className="text-xl md:text-2xl font-bold text-white">{formatStat(videoStats.subscriberCount)}</div>
+                 </div>
+
+                 <div className="glass-panel p-4 sm:p-5 rounded-2xl flex flex-col justify-center">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <Eye className="w-4 h-4" />
+                      <span className="text-[11px] uppercase tracking-wider font-semibold">Views</span>
+                    </div>
+                    <div className="text-xl md:text-2xl font-bold text-white">{formatStat(videoStats.viewCount)}</div>
+                 </div>
+
+                 <div className="glass-panel p-4 sm:p-5 rounded-2xl flex flex-col justify-center">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <ThumbsUp className="w-4 h-4" />
+                      <span className="text-[11px] uppercase tracking-wider font-semibold">Likes</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <div className="text-xl md:text-2xl font-bold text-white">{formatStat(videoStats.likeCount)}</div>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-400" title="Estimated dislikes">
+                        <ThumbsDown className="w-3 h-3" />
+                        {formatStat(videoStats.dislikeCount)}
+                      </div>
+                    </div>
+                 </div>
+
+                 <div className="glass-panel p-4 sm:p-5 rounded-2xl flex flex-col justify-center">
+                    <div className="flex items-center gap-2 text-slate-400 mb-2">
+                      <Share2 className="w-4 h-4" />
+                      <span className="text-[11px] uppercase tracking-wider font-semibold">Shares</span>
+                    </div>
+                    <div className="text-xl md:text-2xl font-bold text-white">{formatStat(videoStats.shareCount)} <span className="text-[10px] text-slate-500 font-normal ml-1">est.</span></div>
+                 </div>
+              </motion.div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Left Column: Analysis Dashboard */}
+              <div className="lg:col-span-1 space-y-6">
               
               {/* Summary Card */}
               {analysis?.summary && (
@@ -405,10 +675,12 @@ export default function DashboardPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="glass-panel p-6 sm:p-8 rounded-2xl"
                 >
-                  <h3 className="font-semibold text-lg mb-3 text-white flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-accent" />
-                    AI Summary
-                  </h3>
+                  <Tooltip content="A synthesized overview of the overall audience response and key themes" side="top">
+                    <h3 className="font-semibold text-lg mb-3 text-white inline-flex items-center gap-2 cursor-help">
+                      <Zap className="w-5 h-5 text-accent" />
+                      AI Summary
+                    </h3>
+                  </Tooltip>
                   <p className="text-slate-300 text-sm leading-relaxed">{analysis.summary}</p>
                 </motion.div>
               )}
@@ -423,10 +695,12 @@ export default function DashboardPage() {
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-accent opacity-5 blur-[60px] rounded-full"></div>
                   
-                  <h3 className="font-semibold text-lg mb-8 text-white flex items-center gap-2 relative z-10">
-                    <PieChartIcon className="w-5 h-5 text-accent" />
-                    Audience Sentiment
-                  </h3>
+                  <Tooltip content="Overall emotional tone derived from comments" side="top">
+                    <h3 className="font-semibold text-lg mb-8 text-white inline-flex items-center gap-2 relative z-10 cursor-help">
+                      <PieChartIcon className="w-5 h-5 text-accent" />
+                      Audience Sentiment
+                    </h3>
+                  </Tooltip>
 
                   <div className="flex flex-col items-center justify-center relative z-10">
                     {/* Glowing Circular Visualization */}
@@ -492,10 +766,12 @@ export default function DashboardPage() {
                   transition={{ delay: 0.2 }}
                   className="glass-panel p-6 sm:p-8 rounded-2xl"
                 >
-                  <h3 className="font-semibold text-lg mb-6 text-white flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-accent" />
-                    Frequently Mentioned
-                  </h3>
+                  <Tooltip content="Keywords extracted based on frequency and prominence" side="top">
+                    <h3 className="font-semibold text-lg mb-6 text-white inline-flex items-center gap-2 cursor-help">
+                      <BarChart3 className="w-5 h-5 text-accent" />
+                      Frequently Mentioned
+                    </h3>
+                  </Tooltip>
                   <div className="space-y-4 md:space-y-5 pt-2">
                     {analysis.keywords.map((keyword, idx) => {
                        const maxCount = Math.max(...analysis.keywords.map(k => k.count));
@@ -531,10 +807,12 @@ export default function DashboardPage() {
                   transition={{ delay: 0.3 }}
                   className="glass-panel p-6 sm:p-8 rounded-2xl"
                 >
-                  <h3 className="font-semibold text-lg mb-4 text-white flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-red-400" />
-                    Top Complaints
-                  </h3>
+                  <Tooltip content="Common negative themes or issues raised by users" side="top">
+                    <h3 className="font-semibold text-lg mb-4 text-white inline-flex items-center gap-2 cursor-help">
+                      <AlertCircle className="w-5 h-5 text-red-400" />
+                      Top Complaints
+                    </h3>
+                  </Tooltip>
                   <ul className="space-y-3">
                     {analysis.complaints.map((complaint, idx) => (
                        <li key={idx} className="flex gap-3 text-sm text-slate-300 bg-red-500/10 p-3.5 rounded-xl border border-red-500/20">
@@ -551,28 +829,44 @@ export default function DashboardPage() {
             <div className="lg:col-span-2">
               <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-full max-h-[800px] border-white/10">
                 <div className="p-5 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/5 backdrop-blur-md">
-                   <h3 className="font-semibold text-lg text-white flex items-center gap-2">
-                     <MessageSquare className="w-5 h-5 text-accent" />
-                     Raw Comments ({comments.length})
-                   </h3>
+                   <Tooltip content="A sample of unfiltered comments from the video" side="top">
+                     <h3 className="font-semibold text-lg text-white inline-flex items-center gap-2 cursor-help">
+                       <MessageSquare className="w-5 h-5 text-accent" />
+                       <div className="flex flex-col">
+                         <span>Raw Comments ({comments.length})</span>
+                         {comments.length >= 1000 && (
+                           <span className="text-xs text-slate-400 font-normal leading-tight max-w-[200px] mt-1">
+                             YouTube API may limit retrieval of very large comment sections (top-level only).
+                           </span>
+                         )}
+                       </div>
+                     </h3>
+                   </Tooltip>
                    <div className="relative w-full sm:w-auto">
-                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                     <input 
-                       type="text" 
-                       placeholder="Filter comments..." 
-                       value={searchTerm}
-                       onChange={e => setSearchTerm(e.target.value)}
-                       className="w-full sm:w-auto pl-9 pr-4 py-2 text-sm border border-white/10 rounded-xl outline-none focus:border-accent focus:ring-1 focus:ring-accent bg-slate-900/50 text-white placeholder-slate-400 min-w-[240px] transition-all"
-                     />
+                     <Tooltip content="Filter raw comments by author name or text content" side="top">
+                       <div className="relative w-full sm:w-auto">
+                         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                         <input 
+                           type="text" 
+                           placeholder="Filter comments..." 
+                           value={searchTerm}
+                           onChange={e => {
+                             setSearchTerm(e.target.value);
+                             setVisibleCount(100);
+                           }}
+                           className="w-full sm:w-auto pl-9 pr-4 py-2 text-sm border border-white/10 rounded-xl outline-none focus:border-accent focus:ring-1 focus:ring-accent bg-slate-900/50 text-white placeholder-slate-400 min-w-[240px] transition-all"
+                         />
+                       </div>
+                     </Tooltip>
                    </div>
                 </div>
                 
-                <div className="overflow-y-auto flex-1 p-0 custom-scrollbar">
+                <div className="overflow-y-auto flex-1 p-0 custom-scrollbar relative">
                    <div className="divide-y divide-white/5">
                      <AnimatePresence>
-                        {filteredComments.map((comment) => (
+                        {renderedComments.map((comment, i) => (
                           <motion.div 
-                            key={comment.id}
+                            key={comment.id + "-" + i}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             className="p-5 sm:p-6 hover:bg-white/5 transition-colors group"
@@ -582,7 +876,7 @@ export default function DashboardPage() {
                               <div className="flex-1 min-w-0 pt-0.5">
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <span className="font-semibold text-sm text-white/90 truncate">{comment.author}</span>
-                                  <span className="text-xs text-slate-400">{new Date(comment.publishedAt).toLocaleDateString()}</span>
+                                  <span className="text-xs text-slate-400">{new Date(comment.publishedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
                                 </div>
                                 <p className="text-sm text-slate-300 whitespace-pre-wrap break-words leading-relaxed">{comment.text}</p>
                                 <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400 font-medium">
@@ -594,7 +888,20 @@ export default function DashboardPage() {
                           </motion.div>
                         ))}
                      </AnimatePresence>
-                     {filteredComments.length === 0 && (
+                     {fullFilteredComments.length > renderedComments.length && (
+                        <div className="p-8 flex flex-col items-center gap-4 border-t border-white/10 bg-slate-900/50 sticky bottom-0">
+                          <span className="text-slate-400 text-sm">
+                            Viewing {renderedComments.length} of {fullFilteredComments.length} comments
+                          </span>
+                          <button
+                            onClick={() => setVisibleCount(prev => prev + 100)}
+                            className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors border border-white/10 font-medium tracking-wide"
+                          >
+                            Load More
+                          </button>
+                        </div>
+                     )}
+                     {fullFilteredComments.length === 0 && (
                        <div className="p-12 text-center text-slate-400 text-sm">
                          No comments match your filter.
                        </div>
@@ -605,6 +912,7 @@ export default function DashboardPage() {
             </div>
             
           </div>
+        </div>
         )}
       </main>
       {/* Auth Modal directly nested for guests */}
