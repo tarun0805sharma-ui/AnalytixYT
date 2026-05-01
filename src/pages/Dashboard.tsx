@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { GoogleGenAI } from '@google/genai';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -122,57 +121,9 @@ export default function DashboardPage() {
       } else {
         setVideoStats(null);
       }
-
-      // Run AI analysis locally in the frontend
-      if (fixedComments.length > 0) {
-        setAnalysis(null); // clear old
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const commentsForAI = fixedComments.slice(0, 100).map(c => c.text);
-        const prompt = `Analyze these YouTube comments and provide a structured JSON response. 
-Comments: ${JSON.stringify(commentsForAI)}
-
-You must return ONLY a raw JSON object.
-The JSON must follow this exact structure:
-{
-  "sentiment": {
-    "positive": number (percentage 0-100),
-    "negative": number (percentage 0-100),
-    "neutral": number (percentage 0-100)
-  },
-  "keywords": [
-    { "word": "keyword", "count": number }
-  ] (Top 10 keywords/topics),
-  "complaints": [ "string" ] (Top 3 common complaints or issues, if any),
-  "summary": "string" (A 2-3 sentence overview of audience opinion)
-}`;
-
-        try {
-          const result = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json"
-            }
-          });
-
-          const textResult = result.text;
-          if (textResult) {
-              const cleanedText = textResult.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
-              setAnalysis(JSON.parse(cleanedText));
-          }
-        } catch (aiError: any) {
-          console.error("AI Analysis Error:", aiError);
-          // Fallback analysis if Gemini fails
-          setAnalysis({
-            sentiment: { positive: 65, negative: 15, neutral: 20 },
-            keywords: [
-              { word: "error", count: 1 },
-              { word: "analysis", count: 1 }
-            ],
-            complaints: [`AI Analysis failed: ${aiError.message || "Unknown error"}`],
-            summary: "Could not perform live AI analysis. Defaulting to fallback data. Please check logs."
-          });
-        }
+      
+      if (responseData.analysis) {
+        setAnalysis(responseData.analysis);
       } else {
         setAnalysis(null);
       }

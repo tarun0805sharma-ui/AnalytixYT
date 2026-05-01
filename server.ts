@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { google } from 'googleapis';
 import Stripe from 'stripe';
 import path from 'path';
+import { GoogleGenAI } from '@google/genai';
 
 async function startServer() {
   const app = express();
@@ -73,48 +74,13 @@ async function startServer() {
       
       let targetTotal = 5000;
 
-      // If YOUTUBE_API_KEY is not set, we return mock data so the demo works
+      // If YOUTUBE_API_KEY is not set, return an error requesting the user to configure it
       if (!process.env.YOUTUBE_API_KEY) {
-        console.warn("YOUTUBE_API_KEY not set. Returning mock data for demonstration.");
-        
-        videoStats.subscriberCount = "1.2M";
-        videoStats.viewCount = "5.4M";
-        videoStats.likeCount = "342K";
-        videoStats.dislikeCount = "12K";
-        videoStats.shareCount = "45K";
+        return res.status(401).json({ error: 'YOUTUBE_API_KEY is not configured on your server. Please add it to your environment variables to fetch real comments.' });
+      }
 
-        // Generate some realistic mock comments
-        const mockSentiments = ['positive', 'negative', 'neutral'];
-        const realisticNames = ['Alex Dev', 'SarahJ', 'TechNinja', 'CodeMaster', 'WebDev2026', 'DataGuru', 'Jane Doe', 'CryptoKing', 'DesignPro', 'MusicLover99', 'GamerGuy', 'Reviewer101', 'StartupFounder', 'ProductManager', 'UX_Expert'];
-        const mockTexts = [
-          "This is exactly what I was looking for! Thanks for the great tutorial.",
-          "I'm getting an error at 5:23, anyone know how to fix it?",
-          "The audio quality is pretty bad in this one.",
-          "Very informative, subscribed!",
-          "Could you do a video on the advanced features next?",
-          "This saved me hours of work, thank you so much.",
-          "Not clear enough, I had to watch it 3 times.",
-          "Awesome content as always, keep it up 👍",
-          "Can you share the source code?",
-          "I disagree with the second point, it usually causes memory leaks."
-        ];
-        
-        // Ensure we don't crash Node by generating insanely huge mocks for 'unlimited' agency tier
-        // We cap mock to targetTotal or 50,000 (avoiding memory blowout for dummy data)
-        const generateTotal = Math.min(targetTotal, 50000); 
-        for (let i = 0; i < generateTotal; i++) {
-          comments.push({
-            id: `mock-${i}`,
-            author: realisticNames[i % realisticNames.length] + (i > 14 ? i.toString() : ''),
-            authorProfileImageUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${i}`,
-            text: mockTexts[i % mockTexts.length],
-            likeCount: Math.floor(Math.random() * 500),
-            publishedAt: new Date(Date.now() - Math.random() * 10000000000).toISOString()
-          });
-        }
-      } else {
-        // Fetch real comments using the Youtube Data API
-        try {
+      // Fetch real comments using the Youtube Data API
+      try {
           // Fetch Video Statistics
           const videoResponse = await youtube.videos.list({
             part: ['snippet', 'statistics'],
@@ -203,7 +169,6 @@ async function startServer() {
           }
           return res.status(500).json({ error: `YouTube API Error: ${errorMessage || 'Failed to fetch comments. Please try again later.'}` });
         }
-      }
 
       // Analyze with Gemini
       if (comments.length === 0) {
@@ -213,7 +178,68 @@ async function startServer() {
       // Ensure comments are sorted newest first (latest comments)
       comments.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
-      res.json({ comments, analysis: null, videoTitle, videoStats });
+      let analysis = null;
+
+      if (process.env.GEMINI_API_KEY && comments.length > 0) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          const commentsForAI = comments.slice(0, 100).map(c => c.text);
+          const prompt = `Analyze these YouTube comments and provide a structured JSON response. 
+Comments: ${JSON.stringify(commentsForAI)}
+
+You must return ONLY a raw JSON object.
+The JSON must follow this exact structure:
+{
+  "sentiment": {
+    "positive": number (percentage 0-100),
+    "negative": number (percentage 0-100),
+    "neutral": number (percentage 0-100)
+  },
+  "keywords": [
+    { "word": "keyword", "count": number }
+  ] (Top 10 keywords/topics),
+  "complaints": [ "string" ] (Top 3 common complaints or issues, if any),
+  "summary": "string" (A 2-3 sentence overview of audience opinion)
+}`;
+
+          const result = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json"
+            }
+          });
+
+          const textResult = result.text;
+          if (textResult) {
+            const cleanedText = textResult.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+            analysis = JSON.parse(cleanedText);
+          }
+        } catch (aiError: any) {
+          console.error("AI Analysis Error:", aiError);
+          // Fallback analysis if Gemini fails
+          analysis = {
+            sentiment: { positive: 65, negative: 15, neutral: 20 },
+            keywords: [
+              { word: "error", count: 1 },
+              { word: "analysis", count: 1 }
+            ],
+            complaints: [`AI Analysis failed on server: ${aiError.message || "Unknown error"}`],
+            summary: "Could not perform live AI analysis. Defaulting to fallback data. Please check logs."
+          };
+        }
+      } else if (!process.env.GEMINI_API_KEY) {
+        analysis = {
+          sentiment: { positive: 50, negative: 10, neutral: 40 },
+          keywords: [
+            { word: "api_key_missing", count: 1 }
+          ],
+          complaints: ["Generate API keys in Google AI studio first."],
+          summary: "GEMINI_API_KEY is not configured on your server, AI analysis has been skipped."
+        };
+      }
+
+      res.json({ comments, analysis, videoTitle, videoStats });
     } catch (error: any) {
       console.error('Server error:', error);
       res.status(500).json({ error: error.message || 'An unexpected internal server error occurred while processing your request.' });
